@@ -5,42 +5,42 @@ export type FileChannel = 'file';
 export type FilePathChannel = 'file-path';
 export type PriceList = 'price-list';
 export type PriceRanges = 'price-ranges';
+export type DownloadPDF = 'download-pdf';
+export type SaveFile = 'save-file';
+export type SaveAllFiles = 'save-all-files';
+export type DownloadAllPDF = 'download-all-pdf';
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {
     sendMessage(channel: Channels, args: unknown[]) {
       ipcRenderer.send(channel, args);
     },
-    on(channel: PriceList, func: (...args: unknown[]) => void) {
-      const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
-        func(...args);
-      ipcRenderer.on(channel, subscription);
-
-      return () => {
-        ipcRenderer.removeListener(channel, subscription);
-      };
-    },
     once(channel: Channels, func: (...args: unknown[]) => void) {
       ipcRenderer.once(channel, (_event, ...args) => func(...args));
     },
-    sendDimensions(channel: PriceList, func: (...args: unknown[]) => void) {
-      const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
-        func(...args);
-      ipcRenderer.on(channel, subscription);
+    async sendListOfOrders(channel: FileChannel, args: unknown[]) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
     },
-    sendRanges(channel: PriceRanges, func: (...args: unknown[]) => void) {
-      const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
-        func(...args);
-      ipcRenderer.on(channel, subscription);
+    async sendPriceList(channel: PriceList, args: Array<object>) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
     },
-    sendFile(channel: FileChannel, args: unknown[]) {
-      ipcRenderer.send(channel, args);
+    async downloadPdf(channel: DownloadPDF, args: string) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
     },
-    sendPriceList(channel: PriceList, args: Array<object>) {
-      ipcRenderer.send(channel, args);
+    async saveFile(channel: SaveFile, args: string) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
     },
-    deleteListners(channel: PriceList | PriceRanges) {
-      ipcRenderer.removeAllListeners(channel);
+    async saveAllFiles(channel: SaveFile, args: string) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
+    },
+    async downloadAllPdf(channel: DownloadAllPDF, args: string) {
+      const test = await ipcRenderer.invoke(channel, args);
+      return test;
     },
   },
 });

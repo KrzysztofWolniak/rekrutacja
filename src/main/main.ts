@@ -10,16 +10,27 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import { timeStamp } from 'console';
+import { Gabaryty, Przedzialy } from 'renderer/pages/AddFile';
+import FileConversionHandler from './FileConversionHandler';
+import WindowSettings from './WindowSettings';
+import ReportOperator from './ReportOperator';
+import { writeFile } from 'fs';
 
+require('events').EventEmitter.defaultMaxListeners = 15;
+const puppeteer = require('puppeteer');
+const Store = require('electron-store');
+const storage = new Store();
 interface ArrayElementType {
-  [key: string]: string;
+  [key: string]: string | number;
 }
+
+require('@electron/remote/main').initialize();
 
 class AppUpdater {
   constructor() {
@@ -29,261 +40,92 @@ class AppUpdater {
   }
 }
 
-let mainWindow: BrowserWindow | null = null;
+//ipcMain handlers
+const generatePDF= async(html: string) =>{
+  return new Promise(async (resolve,reject)=>{
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.setContent(html);
+    await page.emulateMediaType("screen");
+    const pdfConfig = {
+      format: "A4",
+      printBackground: true,
+    };
+    const pdf = await page.pdf(pdfConfig);
+    await browser.close();
+    resolve(pdf)
+  })
+  
+}
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
 });
-ipcMain.on('price-list', async (event, arg) => {
-  const PriceListArray: Array<Object> = [];
-  console.time('Przetwarzanie na JSONA');
-  console.log('Dostalem cennik');
-  const XLSX = require('xlsx');
-  const workbook = XLSX.read(arg);
-  const workSheets: any = {};
-  // eslint-disable-next-line no-restricted-syntax
-  for (const sheetName of workbook.SheetNames) {
-    workSheets[sheetName] = XLSX.utils.sheet_to_json(
-      workbook.Sheets[sheetName]
-    );
-  }
-  console.timeEnd('Przetwarzanie na JSONA');
-  console.time('Dodawanie gabarytow i przedziałow');
-  const SetOfDimensions: Set<any> = new Set();
-  //console.log(workSheets["Cennik fulfilment"])
-  let StartCopying: boolean = false;
 
-  workSheets['Cennik fulfilment'].forEach((obj: any) => {
-    // console.log(obj.__EMPTY_2)
-    if (obj.__EMPTY_2) {
-      obj.__EMPTY_2.toString().includes('od 1')
-        ? SetOfDimensions.add(obj)
-        : null;
-    }
+ipcMain.handle('price-list', async (event, arg) => {
+  const PriceListArray: Array<Przedzialy | Gabaryty> =
+    await FileConversionHandler.handlePriceListConvertion(arg);
+  return PriceListArray;
+});
 
-    if (obj.__EMPTY) {
-      if (obj.__EMPTY.toString().includes('kompletacja')) {
-        StartCopying = true;
-      } else if (obj.__EMPTY.toString().includes('*')) {
-        StartCopying = false;
-      }
-    }
-    StartCopying ? SetOfDimensions.add(obj) : null;
-  });
-  console.timeEnd('Dodawanie gabarytow i przedziałow');
-  console.time('Tworzenie listy obiektow');
-  if (SetOfDimensions != undefined) {
+ipcMain.handle('file', async (event, arg) => {
+  const db = await FileConversionHandler.handleListOfOrdersConvertion(arg);
+
+  return db;
+});
+
+ipcMain.handle('download-pdf', async (event, arg) => {
+  const PDFBuffer = generatePDF(arg);
+
+  return PDFBuffer;
+});
+ipcMain.handle('save-file', async (event, arg) => {
+  const filePath = await dialog.showSaveDialog(arg.settings);
+  
+  if (filePath.filePath) {
+    writeFile(filePath.filePath, arg.buffer, () => console.log('Zapisałem plik'));
     
-    const aaa = Array.from(SetOfDimensions);
-
-    aaa.shift();
-    const DimensionsObject: any = {};
-    for (let index = 1; index < Object.keys(aaa[0]).length + 1; index++) {
-      DimensionsObject[`PRZEDZIAL_${index}`] = aaa[0][`__EMPTY_${index * 2}`]
-        .split(' ')
-        .filter((el: any) => {
-          if (!isNaN(el)) {
-            return el;
-          }
-        });
-
-      DimensionsObject[`PRZEDZIAL_${index}`] = DimensionsObject[
-        `PRZEDZIAL_${index}`
-      ].map((el: string) => {
-        return Number(el);
-      });
-    }
-    PriceListArray.push(DimensionsObject);
-    aaa.forEach((el: any) => {
-      const ArrayElement: ArrayElementType = {};
-      if (el.__EMPTY_1 != undefined) {
-        if (el.__EMPTY) {
-          delete el.__EMPTY;
-        }
-
-        const elementDemension = el.__EMPTY_1.toString().split('\n');
-
-        ArrayElement['GABARYT'] = elementDemension[0].split('\r').join();
-
-        el.__EMPTY_1 = elementDemension[0];
-        for (let index = 1; index < Object.keys(el).length / 2; index++) {
-          ArrayElement[`NETTO_${index}`] = el[`__EMPTY_${index * 2}`];
-          ArrayElement[`BRUTTO_${index}`] = el[`__EMPTY_${index * 2 + 1}`];
-        }
-        PriceListArray.push(ArrayElement);
-      }
-    });
-    console.timeEnd('Tworzenie listy obiektow');
-    console.log('Poczatek', PriceListArray);
   }
-  event.reply('price-ranges',PriceListArray[0])
-  PriceListArray.shift()
-  event.reply('price-list',PriceListArray)
+  return 'Udało się zapisać plik';
 });
-ipcMain.on('file', async (event, arg) => {
-  console.log('dostalem plik');
-  console.time('Przetwarzanie excela na jsona');
-
-  const XLSX = require('xlsx');
-  const workbook = XLSX.read(arg);
-  const workSheets: any = {};
-  // eslint-disable-next-line no-restricted-syntax
-  for (const sheetName of workbook.SheetNames) {
-    workSheets[sheetName] = XLSX.utils.sheet_to_json(
-      workbook.Sheets[sheetName]
-    );
+ipcMain.handle('download-all-pdf', async (event, arg) => {
+  const arrOfBuffers: any[] = [];
+console.log("co jest kurwa")
+  for (const element of arg) {
+    const PDFBuffer =  await generatePDF(element.html);
+    arrOfBuffers.push({ buffer: PDFBuffer, name: element.name });
   }
 
-  console.timeEnd('Przetwarzanie excela na jsona');
-  console.time('Tworzenie bazy danych');
-
-  // event.reply('file', JSON.stringify(workSheets.Zlecenia));
-  const db: any = {
-    sklepy: [
-      {
-        Name: 'SKLEP_1',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_2',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_3',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_4',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_5',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_6',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_7',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_8',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-      {
-        Name: 'SKLEP_9',
-        KSIAZKA: 0,
-        XS: 0,
-        S: 0,
-        M: 0,
-        L: 0,
-        XL: 0,
-        SZKLO: 0,
-        ILOSC_ZAMOWIEN: new Set(),
-        ZNIZKA: 0,
-      },
-    ],
-  };
-  console.timeEnd('Tworzenie bazy danych');
-  console.time('Glowny algorytm');
-
-  workSheets.Zlecenia.forEach((obj: any) => {
-    obj.gabaryt = obj.gabaryt.split('_');
-    const test = db.sklepy.find((x: any) => {
-      return x.Name == obj.Departament;
-    });
-    if (test !== undefined) {
-      if (obj.gabaryt.length == 2) {
-        test[obj.gabaryt[0]] += obj.quantity;
-        test[obj.gabaryt[1]] += obj.quantity;
-        test.ILOSC_ZAMOWIEN.add(obj.order_id);
-      } else {
-        test[obj.gabaryt[0]] += obj.quantity;
-        test.ILOSC_ZAMOWIEN.add(obj.order_id);
-      }
+  
+  return arrOfBuffers;
+});
+ipcMain.handle('save-all-files', async (event, arg) => {
+ 
+  const filePath = await dialog.showOpenDialog(
+    {
+      buttonLabel: 'Wybierz Folder',
+     
+     properties:['openDirectory']
     }
-  });
-  db.sklepy.forEach((obj: any) => {
-    obj.ILOSC_ZAMOWIEN = obj.ILOSC_ZAMOWIEN.size;
-  });
-  console.log('Kurna no', db);
-  console.timeEnd('Glowny algorytm');
+  );
 
-  // console.log(workSheets.Zlecenia);
-  // console.log(workbook);
+for(const element of arg){
+  if(filePath.filePaths){
+    const adres = `${filePath.filePaths[0]}\\Raport_${element.name}.pdf`
+    
+   await writeFile(adres,element.buffer,()=>{console.log("Zapisano Plik")})
+    
+  }
+}
+  
+
+  return 'Udało się zapisać plik';
 });
-ipcMain.on('file-path', async (event, arg) => {
-  console.log('dostalem sciezke pliku');
-  console.log(arg);
-});
+
+// mainWindow section
+let mainWindow: BrowserWindow | null = null;
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -323,19 +165,29 @@ const createWindow = async () => {
     return path.join(RESOURCES_PATH, ...paths);
   };
 
+  const bounds: any = WindowSettings.getWindowsSettings(storage);
+  const positionBounds: any = WindowSettings.getWindowPosition(storage);
   mainWindow = new BrowserWindow({
     show: false,
-    width: 1024,
-    height: 728,
+    width: bounds[0],
+    height: bounds[1],
+    x: positionBounds[0],
+    y: positionBounds[1],
     icon: getAssetPath('icon.png'),
 
     webPreferences: {
+      nodeIntegration: true,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),
     },
   });
-
+  mainWindow.on('resized', () => {
+    WindowSettings.saveBounds(storage, mainWindow?.getSize());
+  });
+  mainWindow.on('moved', () => {
+    WindowSettings.savePosition(storage, mainWindow?.getPosition());
+  });
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   mainWindow.on('ready-to-show', () => {

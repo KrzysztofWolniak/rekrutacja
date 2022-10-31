@@ -1,27 +1,32 @@
+/* eslint-disable @typescript-eslint/ban-types */
 import {
   Channels,
+  DownloadAllPDF,
+  DownloadPDF,
   FileChannel,
   FilePathChannel,
   PriceList,
   PriceRanges,
+  SaveAllFiles,
+  SaveFile,
 } from 'main/preload';
+import { Gabaryty, Przedzialy } from './pages/AddFile';
 
 declare global {
   interface Window {
     electron: {
       ipcRenderer: {
         sendMessage(channel: Channels, args: unknown[]): void;
-        sendFile(channel: FileChannel, args: unknown): void;
-        sendPriceList(channel: PriceList, args: unknown): void;
-        sendFilePath(channel: FilePathChannel, args: unknown): void;
-        deleteListners(channel: PriceList | PriceRanges): void;
-        on(
+        sendListOfOrders(channel: FileChannel, args: unknown): void;
+        sendPriceList(
           channel: PriceList,
-          func: (...args: unknown[]) => void
-        ): (() => void) | undefined;
+          args: unknown
+        ): Array<Przedzialy & Gabaryty>;
         once(channel: Channels, func: (...args: unknown[]) => void): void;
-        sendDimensions(channel: PriceList, func: (arg: any) => void): void;
-        sendRanges(channel: PriceRanges, func: (arg: any) => void): void;
+        downloadPdf(channel: DownloadPDF, args: unknown): ArrayBuffer;
+        saveFile(channel: SaveFile, args: unknown): any;
+        saveAllFiles(channel: SaveAllFiles, args: unknown): any;
+        downloadAllPdf(channel: DownloadAllPDF, args: unknown): any;
       };
     };
   }

@@ -109,9 +109,14 @@
     }
   },
   "dependencies": {
+    "@electron/remote": "^2.0.8",
+    "bootstrap": "^5.2.2",
     "electron-debug": "^3.2.0",
     "electron-log": "^4.4.8",
+    "electron-store": "^8.1.0",
     "electron-updater": "^5.2.3",
+    "framer-motion": "^7.6.2",
+    "puppeteer": "^19.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -254,7 +259,7 @@
     "url": "https://opencollective.com/electron-react-boilerplate-594"
   },
   "devEngines": {
-    "node": ">=14.x",
+    "node": ">=17.x",
     "npm": ">=7.x"
   },
   "electronmon": {
