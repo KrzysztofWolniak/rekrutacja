@@ -92,7 +92,7 @@ ipcMain.handle('save-file', async (event, arg) => {
 });
 ipcMain.handle('download-all-pdf', async (event, arg) => {
   const arrOfBuffers: any[] = [];
-console.log("co jest kurwa")
+
   for (const element of arg) {
     const PDFBuffer =  await generatePDF(element.html);
     arrOfBuffers.push({ buffer: PDFBuffer, name: element.name });

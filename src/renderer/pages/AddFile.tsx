@@ -77,6 +77,7 @@ const AddFile = (props: any) => {
               FileOperations.setRanges(arr[0]);
               arr.shift();
               FileOperations.setDimensions(arr);
+            setLoading(false)
               
               resolve();
             } else {
@@ -86,6 +87,7 @@ const AddFile = (props: any) => {
           } else {
             FileOperations.setListOfShops(arr);
         
+            setLoading(false)
 
             resolve();
           }
