@@ -41,22 +41,21 @@ class AppUpdater {
 }
 
 //ipcMain handlers
-const generatePDF= async(html: string) =>{
-  return new Promise(async (resolve,reject)=>{
+const generatePDF = async (html: string) => {
+  return new Promise(async (resolve, reject) => {
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     await page.setContent(html);
-    await page.emulateMediaType("screen");
+    await page.emulateMediaType('screen');
     const pdfConfig = {
-      format: "A4",
+      format: 'A4',
       printBackground: true,
     };
     const pdf = await page.pdf(pdfConfig);
     await browser.close();
-    resolve(pdf)
-  })
-  
-}
+    resolve(pdf);
+  });
+};
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
@@ -77,51 +76,43 @@ ipcMain.handle('file', async (event, arg) => {
 });
 
 ipcMain.handle('download-pdf', async (event, arg) => {
-  const PDFBuffer = generatePDF(arg);
+  const PDFBuffer = await generatePDF(arg);
 
   return PDFBuffer;
 });
 ipcMain.handle('save-file', async (event, arg) => {
   const filePath = await dialog.showSaveDialog(arg.settings);
-  
+
   if (filePath.filePath) {
-    writeFile(filePath.filePath, arg.buffer, () => console.log('Zapisałem plik'));
-    
+    writeFile(filePath.filePath, arg.buffer, () =>
+      console.log('Zapisałem plik')
+    );
   }
   return 'Udało się zapisać plik';
 });
 ipcMain.handle('download-all-pdf', async (event, arg) => {
-  const arrOfBuffers: any[] = [];
+  const arrOfBuffers: any[] = await ReportOperator.generateAllPDF(arg);
 
-  for (const element of arg) {
-    const PDFBuffer =  await generatePDF(element.html);
-    arrOfBuffers.push({ buffer: PDFBuffer, name: element.name });
-  }
-
-  
   return arrOfBuffers;
 });
 ipcMain.handle('save-all-files', async (event, arg) => {
- 
-  const filePath = await dialog.showOpenDialog(
-    {
-      buttonLabel: 'Wybierz Folder',
-     
-     properties:['openDirectory']
+  const filePath = await dialog.showOpenDialog({
+    buttonLabel: 'Wybierz Folder',
+
+    properties: ['openDirectory'],
+  });
+
+  for (const element of arg) {
+    if (filePath.filePaths) {
+      const adres = `${filePath.filePaths[0]}\\Raport_${element.name}.pdf`;
+
+      await writeFile(adres, element.buffer, () => {
+        console.log('Zapisano Plik');
+      });
     }
-  );
-
-for(const element of arg){
-  if(filePath.filePaths){
-    const adres = `${filePath.filePaths[0]}\\Raport_${element.name}.pdf`
-    
-   await writeFile(adres,element.buffer,()=>{console.log("Zapisano Plik")})
-    
   }
-}
-  
 
-  return 'Udało się zapisać plik';
+  return 'Udało się zapisać pliki';
 });
 
 // mainWindow section
